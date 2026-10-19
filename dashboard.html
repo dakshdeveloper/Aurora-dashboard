@@ -1,0 +1,64 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Aurora Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css">
+<style>
+.wrapd{max-width:1200px;margin:auto;padding:120px 24px 60px}
+.servers{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;margin-top:30px}
+.srv{padding:28px;border:1px solid var(--line);border-radius:26px;background:var(--card);text-align:center;transition:.35s;animation:up .6s both}
+.srv:hover{transform:translateY(-6px);border-color:#7c6cff55}@keyframes up{from{opacity:0;transform:translateY(30px)}}
+.srv img,.srv .fb{width:84px;height:84px;border-radius:50%;margin:0 auto 16px;display:grid;place-items:center;background:#1a1a1f;font-size:28px;object-fit:cover}
+.srv.off img,.srv.off .fb{filter:grayscale(1) brightness(.7)}.srv.on img{box-shadow:0 0 0 2px var(--a2),0 0 30px #7c6cff66}
+.srv h4{font-weight:500;margin-bottom:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lay{display:grid;grid-template-columns:230px 1fr;gap:24px;margin-top:24px}
+.side{display:flex;flex-direction:column;gap:6px;position:sticky;top:100px;align-self:start}
+.side button{text-align:left;padding:12px 16px;border-radius:14px;border:1px solid transparent;background:none;color:var(--mut);font:inherit;cursor:pointer;transition:.2s}
+.side button:hover{color:#fff;background:#ffffff0d}.side button.act{color:#fff;background:#ffffff14;border-color:var(--line)}
+.panel{border:1px solid var(--line);border-radius:26px;background:var(--card);padding:32px;animation:up .5s both}
+.row{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px 0;border-bottom:1px solid var(--line)}.row:last-of-type{border:0}
+.row small{color:var(--mut);display:block}
+.sw{appearance:none;width:46px;height:26px;border-radius:99px;background:#26262c;position:relative;cursor:pointer;transition:.3s;flex:none}
+.sw:after{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.3s}
+.sw:checked{background:linear-gradient(90deg,var(--a2),var(--a3))}.sw:checked:after{left:23px}
+input.t,select.t,textarea.t{background:#111;border:1px solid var(--line);color:#fff;border-radius:12px;padding:10px 14px;font:inherit;min-width:220px}
+.toast{position:fixed;bottom:30px;left:50%;transform:translate(-50%,100px);background:#fff;color:#000;padding:12px 26px;border-radius:99px;font-weight:600;transition:.4s}.toast.show{transform:translate(-50%,0)}
+@media(max-width:800px){.lay{grid-template-columns:1fr}.side{flex-direction:row;overflow:auto;position:static}}
+</style></head><body><div class="glow"></div>
+<nav><a class="logo" href="/"><i>A</i>Aurora</a><div style="display:flex;gap:10px;align-items:center"><span id="user" class="mut" style="font-size:13px"></span><a class="btn o" href="/api/logout">Logout</a></div></nav>
+<div class="wrapd" id="app"></div><div class="toast" id="toast"></div>
+<script>
+// ====== MODULE SCHEMA: add/edit features here. Types: toggle | text | channel(text id) | number | textarea ======
+const MODULES={
+ overview:{n:'Overview',f:[{k:'prefix',t:'text',l:'Prefix',d:'Prefix for text commands',v:'!'},{k:'logChannel',t:'text',l:'Default log channel ID'}]},
+ automod:{n:'Automod',f:[{k:'enabled',t:'toggle',l:'Enable automod'},{k:'antiSpam',t:'toggle',l:'Anti-spam',d:'Block message flooding'},{k:'antiLink',t:'toggle',l:'Block links'},{k:'antiInvite',t:'toggle',l:'Block Discord invites'},{k:'antiMention',t:'toggle',l:'Anti mass-mention'},{k:'maxMentions',t:'number',l:'Max mentions per message',v:5},{k:'badWords',t:'textarea',l:'Blocked words (comma separated)'},{k:'punish',t:'select',l:'Punishment',o:['delete','warn','timeout','kick','ban']}]},
+ antinuke:{n:'Antinuke',f:[{k:'enabled',t:'toggle',l:'Enable antinuke'},{k:'antiBan',t:'toggle',l:'Anti ban'},{k:'antiKick',t:'toggle',l:'Anti kick'},{k:'antiChannel',t:'toggle',l:'Anti channel create/delete'},{k:'antiRole',t:'toggle',l:'Anti role create/delete'},{k:'antiWebhook',t:'toggle',l:'Anti webhook'},{k:'antiBot',t:'toggle',l:'Anti bot add'},{k:'panic',t:'toggle',l:'Panic mode',d:'Auto lockdown on activity spikes'},{k:'whitelist',t:'textarea',l:'Whitelisted user IDs (comma separated)'}]},
+ moderation:{n:'Moderation',f:[{k:'modRole',t:'text',l:'Moderator role ID'},{k:'muteRole',t:'text',l:'Mute role ID'},{k:'dmOnAction',t:'toggle',l:'DM user on action'},{k:'modLog',t:'text',l:'Mod-log channel ID'}]},
+ welcome:{n:'Welcome',f:[{k:'enabled',t:'toggle',l:'Welcome messages'},{k:'channel',t:'text',l:'Channel ID'},{k:'message',t:'textarea',l:'Message',d:'{user} {server} {count}',v:'Welcome {user} to {server}!'},{k:'autorole',t:'text',l:'Autorole ID'}]},
+ logging:{n:'Logging',f:[{k:'messages',t:'toggle',l:'Message edit/delete'},{k:'members',t:'toggle',l:'Joins & leaves'},{k:'voice',t:'toggle',l:'Voice activity'},{k:'moderation',t:'toggle',l:'Moderation actions'},{k:'channel',t:'text',l:'Log channel ID'}]},
+ tickets:{n:'Tickets',f:[{k:'enabled',t:'toggle',l:'Enable tickets'},{k:'category',t:'text',l:'Ticket category ID'},{k:'supportRole',t:'text',l:'Support role ID'},{k:'transcripts',t:'toggle',l:'Save transcripts'},{k:'autoClose',t:'number',l:'Auto-close after (hours)',v:24}]},
+ giveaways:{n:'Giveaways & roles',f:[{k:'giveawayChannel',t:'text',l:'Default giveaway channel ID'},{k:'reactionRoles',t:'toggle',l:'Enable reaction roles'}]}
+};
+const $=s=>document.querySelector(s),app=$('#app');
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(u,o){const r=await fetch(u,o);if(r.status===401){location.href='/api/login';throw 0}return r}
+async function init(){
+ const me=await(await api('/api/me')).json();$('#user').textContent=me.global_name||me.username;
+ app.innerHTML='<span class="tag">Your servers</span><h2 style="margin-top:20px">Select a server</h2><p class="mut" style="margin-top:8px">Loading…</p>';
+ const gs=await(await api('/api/guilds')).json();
+ app.innerHTML=`<span class="tag">Your servers</span><h2 style="margin-top:20px">Select a server</h2>
+ <div class="servers">${gs.map((g,i)=>{const ic=g.icon?`<img src="https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=128" alt="">`:`<div class="fb">${esc(g.name[0])}</div>`;
+ return `<div class="srv ${g.hasBot?'on':'off'}" style="animation-delay:${i*.05}s">${ic}<h4>${esc(g.name)}</h4>${g.hasBot?`<button class="btn" onclick="manage('${g.id}','${esc(g.name).replace(/'/g,'')}')">Manage server</button>`:`<a class="btn o" href="${g.invite}" target="_blank">Add Aurora</a>`}</div>`}).join('')||'<p class="mut">No servers where you have Manage Server permission.</p>'}</div>`}
+async function manage(id,name){
+ const cfg=await(await api('/api/guild/'+id)).json();let cur='overview';
+ function draw(){const m=MODULES[cur];cfg[cur]=cfg[cur]||{};
+  app.innerHTML=`<button class="btn o" onclick="init()">← All servers</button><h2 style="margin-top:20px;font-size:44px">${name}</h2>
+  <div class="lay"><div class="side">${Object.entries(MODULES).map(([k,v])=>`<button class="${k===cur?'act':''}" data-m="${k}">${v.n}</button>`).join('')}</div>
+  <div class="panel"><h3 style="font-size:24px;margin-bottom:8px">${m.n}</h3>${m.f.map(f=>{const v=cfg[cur][f.k]??f.v??(f.t==='toggle'?false:'');
+   const inp=f.t==='toggle'?`<input type="checkbox" class="sw" data-k="${f.k}" ${v?'checked':''}>`:f.t==='textarea'?`<textarea class="t" data-k="${f.k}" rows="3">${esc(v)}</textarea>`:f.t==='select'?`<select class="t" data-k="${f.k}">${f.o.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select>`:`<input class="t" data-k="${f.k}" type="${f.t==='number'?'number':'text'}" value="${esc(v)}">`;
+   return `<div class="row"><div>${f.l}<small>${f.d||''}</small></div>${inp}</div>`}).join('')}
+  <div style="margin-top:24px"><button class="btn" id="save">Save changes</button></div></div></div>`;
+  document.querySelectorAll('.side button').forEach(b=>b.onclick=()=>{collect();cur=b.dataset.m;draw()});
+  $('#save').onclick=async()=>{collect();const r=await api('/api/guild/'+id,{method:'POST',body:JSON.stringify(cfg)});toast(r.ok?'Saved':'Save failed')}}
+ function collect(){document.querySelectorAll('[data-k]').forEach(e=>{cfg[cur][e.dataset.k]=e.type==='checkbox'?e.checked:e.type==='number'?Number(e.value):e.value})}
+ draw()}
+init();
+</script></body></html>
