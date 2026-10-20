@@ -3,3 +3,6 @@ name = 'aurora-dashboard'
 pages_build_output_dir = "public"
 compatibility_date = "2024-11-01"
 # Create KV namespace in Cloudflare, then bind it as AURORA_KV (Pages > Settings > Functions > KV bindings)
+[[kv_namespaces]]
+binding = "AURORA_KV"
+id = "878a90847f184784b9e9bc4179cecb14"
